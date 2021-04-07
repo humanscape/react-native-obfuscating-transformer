@@ -4,11 +4,10 @@ import * as path from "path"
 import * as JavaScriptObfuscator from "javascript-obfuscator"
 import { path as appRootPath } from "app-root-path"
 
-import generate from "babel-generator"
-
 import { getCallerFile } from "./getCallerFile"
 import {
   MetroTransformer,
+  generateAndConvert,
   getMetroTransformer,
   MetroTransformerResult,
   maybeTransformMetroResult,
@@ -39,7 +38,7 @@ export interface ObfuscatingTransformerOptions {
 const sourceDir = path.join(appRootPath, "src")
 
 export function obfuscatingTransformer({
-  filter = filename => filename.startsWith(sourceDir),
+  filter = (filename) => filename.startsWith(sourceDir),
   upstreamTransformer = getMetroTransformer(),
   obfuscatorOptions: _obfuscatorOptions,
   ...otherOptions
@@ -71,13 +70,8 @@ export function obfuscatingTransformer({
         const { code, map }: MetroTransformerResult = result.code
           ? result
           : result.ast
-            ? (generate(result.ast, {
-                filename: props.filename,
-                retainLines: true,
-                sourceMaps: true,
-                sourceFileName: props.filename,
-              }) as MetroTransformerResult)
-            : { code: "", map: "" }
+          ? generateAndConvert(result.ast, props.filename)
+          : { code: "", map: "" }
 
         if (!code) {
           return result
