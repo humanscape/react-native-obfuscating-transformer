@@ -1,12 +1,13 @@
-import { Node } from "babel-core"
+import { Node } from "@babel/core"
 import { RawSourceMap, SourceMapConsumer } from "source-map"
 import * as semver from "semver"
 import {
   MetroRawSourceMap,
   convertStandardSourceMapToMetroRawSourceMap,
 } from "./composeSourceMaps"
-import * as babylon from "babylon"
-import traverse from "babel-traverse"
+import * as babylon from "@babel/parser"
+import traverse from "@babel/traverse"
+import generate from "@babel/generator"
 
 export interface MetroTransformerResult {
   ast?: Node
@@ -45,7 +46,7 @@ export function getMetroTransformer(
   reactNativeMinorVersion: number = getReactNativeMinorVersion(),
 ): MetroTransformer {
   if (reactNativeMinorVersion >= 59) {
-    return require('metro-react-native-babel-transformer/src/index')
+    return require("metro-react-native-babel-transformer/src/index")
   } else if (reactNativeMinorVersion >= 56) {
     return require("metro/src/reactNativeTransformer")
   } else if (reactNativeMinorVersion >= 52) {
@@ -78,20 +79,20 @@ export function maybeTransformMetroResult(
     })
 
     const mapConsumer = new SourceMapConsumer(map as any) // upstream types are wrong
-      ; (traverse as any).cheap(ast, (node: Node) => {
-        if (node.loc) {
-          const originalStart = mapConsumer.originalPositionFor(node.loc.start)
-          if (originalStart.line) {
-            node.loc.start.line = originalStart.line
-            node.loc.start.column = originalStart.column
-          }
-          const originalEnd = mapConsumer.originalPositionFor(node.loc.end)
-          if (originalEnd.line) {
-            node.loc.end.line = originalEnd.line
-            node.loc.end.column = originalEnd.column
-          }
+    ;(traverse as any).cheap(ast, (node: Node) => {
+      if (node.loc) {
+        const originalStart = mapConsumer.originalPositionFor(node.loc.start)
+        if (originalStart.line) {
+          node.loc.start.line = originalStart.line
+          node.loc.start.column = originalStart.column
         }
-      })
+        const originalEnd = mapConsumer.originalPositionFor(node.loc.end)
+        if (originalEnd.line) {
+          node.loc.end.line = originalEnd.line
+          node.loc.end.column = originalEnd.column
+        }
+      }
+    })
 
     return { ast }
   } else if (Array.isArray(upstreamResult.map)) {
@@ -99,4 +100,31 @@ export function maybeTransformMetroResult(
   } else {
     return { code, map }
   }
+}
+
+export function generateAndConvert(
+  ast: Node,
+  filename: string,
+): MetroTransformerResult {
+  let generatorResult = generate(ast, {
+    filename: filename,
+    retainLines: true,
+    sourceMaps: true,
+    sourceFileName: filename,
+  })
+
+  if (!generatorResult.map) {
+    return { code: generatorResult.code }
+  }
+
+  const map = {
+    version: generatorResult.map.version + "",
+    mappings: generatorResult.map.mappings,
+    names: generatorResult.map.names,
+    sources: generatorResult.map.sources,
+    sourcesContent: generatorResult.map.sourcesContent,
+    file: generatorResult.map.file,
+  }
+
+  return { code: generatorResult.code, map: map }
 }
